@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "See your battery percentage to multiple decimal places in GNOME",
   "scripts": {
-    "check": "biome check --write"
+    "check": "biome check --write",
+    "pack": "gnome-extensions pack --force --extra-source=stylesheet.css"
   },
   "contributors": [
     {

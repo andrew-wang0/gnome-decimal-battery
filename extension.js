@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import Clutter from "gi://Clutter";
+import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import St from "gi://St";
 
@@ -10,13 +11,21 @@ import * as Main from "resource:///org/gnome/shell/ui/main.js";
 const BATTERY_PATH = "/sys/class/power_supply/BAT0";
 const UPDATE_INTERVAL_SECONDS = 1;
 
-function readNumber(path) {
+async function readNumber(path) {
   try {
-    const [ok, bytes] = GLib.file_get_contents(path);
+    const file = Gio.File.new_for_path(path);
 
-    if (!ok) return null;
+    const [, contents] = await new Promise((resolve, reject) => {
+      file.load_contents_async(null, (_file, result) => {
+        try {
+          resolve(file.load_contents_finish(result));
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
 
-    const text = new TextDecoder().decode(bytes).trim();
+    const text = new TextDecoder().decode(contents).trim();
     const value = Number(text);
 
     return Number.isFinite(value) ? value : null;
@@ -25,16 +34,18 @@ function readNumber(path) {
   }
 }
 
-function getBatteryPercent() {
-  let now = readNumber(`${BATTERY_PATH}/energy_now`);
-  let full = readNumber(`${BATTERY_PATH}/energy_full`);
+async function getBatteryPercent() {
+  let now = await readNumber(`${BATTERY_PATH}/energy_now`);
+  let full = await readNumber(`${BATTERY_PATH}/energy_full`);
 
   if (now === null || full === null) {
-    now = readNumber(`${BATTERY_PATH}/charge_now`);
-    full = readNumber(`${BATTERY_PATH}/charge_full`);
+    now = await readNumber(`${BATTERY_PATH}/charge_now`);
+    full = await readNumber(`${BATTERY_PATH}/charge_full`);
   }
 
-  if (now === null || full === null || full <= 0) return "BAT ?";
+  if (now === null || full === null || full <= 0) {
+    return "BAT ?";
+  }
 
   return `${((now / full) * 100).toFixed(2)}%`;
 }
@@ -42,19 +53,10 @@ function getBatteryPercent() {
 export default class DecimalBatteryExtension extends Extension {
   enable() {
     this._label = new St.Label({
-      text: getBatteryPercent(),
+      text: "BAT ?",
       y_align: Clutter.ActorAlign.CENTER,
       style_class: "decimal-battery-label",
     });
-
-    this._timeout = GLib.timeout_add_seconds(
-      GLib.PRIORITY_DEFAULT,
-      UPDATE_INTERVAL_SECONDS,
-      () => {
-        this._label.set_text(getBatteryPercent());
-        return GLib.SOURCE_CONTINUE;
-      },
-    );
 
     const quickSettings = Main.panel.statusArea.quickSettings;
 
@@ -66,6 +68,17 @@ export default class DecimalBatteryExtension extends Extension {
     } else {
       Main.panel._rightBox.insert_child_at_index(this._label, 0);
     }
+
+    this._updateLabel();
+
+    this._timeout = GLib.timeout_add_seconds(
+      GLib.PRIORITY_DEFAULT,
+      UPDATE_INTERVAL_SECONDS,
+      () => {
+        this._updateLabel();
+        return GLib.SOURCE_CONTINUE;
+      },
+    );
   }
 
   disable() {
@@ -76,5 +89,13 @@ export default class DecimalBatteryExtension extends Extension {
 
     this._label?.destroy();
     this._label = null;
+  }
+
+  async _updateLabel() {
+    if (!this._label) {
+      return;
+    }
+
+    this._label.set_text(await getBatteryPercent());
   }
 }
