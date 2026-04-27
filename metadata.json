@@ -1,0 +1,8 @@
+{
+  "uuid": "decimal-battery@andrew0.com",
+  "name": "Decimal Battery",
+  "description": " See your battery percentage to multiple decimal places in GNOME",
+  "shell-version": ["46"],
+  "url": "https://github.com/andrew-wang0/gnome-decimal-battery",
+  "version": 1
+}
